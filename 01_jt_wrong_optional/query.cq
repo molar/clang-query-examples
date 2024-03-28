@@ -1,0 +1,35 @@
+set output dump
+# We want to match a call to a constructor 
+# of optional where the single argument
+# is the value type of the optional it self
+# when this happens it is typically because the user/caller 
+# forgot to explicitly instantiate an optional but instead just returns the value type, 
+# triggering an implicit conversion to the optional and materialising a temporary which is 
+# then moved into the optional.
+match cxxConstructExpr(
+  hasType(             
+    classTemplateSpecializationDecl(      
+      hasName("::std::optional"),
+      hasTemplateArgument(0, # the first template argument is the value_type
+        refersToType( # get the type and bind to x for later comparison
+          type().bind("x")
+        )
+      )
+    )
+  ),
+  isExpansionInMainFile(), # maybe there is a better way to get only matches in "user" code
+  # has only checks direct children which is what we want.
+  has( 
+    materializeTemporaryExpr(
+      # check that the materialize is of the optionals value type
+      hasType(
+        type(
+          # we want the desugared type otherwise we get 
+          # ElaboratedType ... 'AStruct' sugar
+          # which does not equal the bound node x.
+          hasUnqualifiedDesugaredType(equalsBoundNode("x"))
+        )
+      )
+    )
+  )
+)
